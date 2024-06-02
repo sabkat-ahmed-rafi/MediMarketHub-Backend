@@ -23,7 +23,6 @@ app.use(cors({
 // Verify Token Middleware
 const verifyToken = async (req, res, next) => {
   const token = req.cookies?.token;
-  console.log(token);
   if (!token) {
     return res.status(401).send({ message: "unauthorized access" });
   }
@@ -53,7 +52,7 @@ async function run() {
   try {
     const database = client.db("MediMarketHub");
     const userCollection = database.collection("user");
-
+    const medicineCollection = database.collection('medicine')
 
 
         // auth related api
@@ -99,6 +98,12 @@ async function run() {
           res.send(result);
         });
 
+        // Get all the medicine information 
+        app.get("/medicine", verifyToken, async (req, res) => {
+          const result = await medicineCollection.find().toArray();
+          res.send(result);
+        });
+
         // Save a user in the database at the time of login.
         app.put("/user", async (req, res) => {
           const user = req.body;
@@ -119,6 +124,28 @@ async function run() {
           const result = await userCollection.updateOne(query, updateDoc, options);
           res.send(result);
         });
+
+        // Update a user role
+        app.patch("/user/updateRole", verifyToken, async (req, res) => {
+          const user = req.body;
+          const query = { email: user?.email };
+          const options = { upsert: true };
+          const updateDoc = {
+            $set: {
+              role: user?.role,
+            },
+          };
+            const result = await userCollection.updateOne(query, updateDoc, options)
+            res.send(result)
+        })
+
+        // Save medicine information on the database by inserting method
+        app.post('/medicine', async (req, res) => {
+          const medicine = req.body;
+          const result = await medicineCollection.insertOne(medicine);
+          res.send(result);
+        }) 
+
     
 
 
