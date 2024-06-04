@@ -1,4 +1,4 @@
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const express = require('express')
 const cors = require('cors')
 const jwt = require("jsonwebtoken");
@@ -53,6 +53,8 @@ async function run() {
     const database = client.db("MediMarketHub");
     const userCollection = database.collection("user");
     const medicineCollection = database.collection('medicine')
+    const categoryCollection = database.collection('category')
+    const cartCollection = database.collection('cart')
 
 
         // auth related api
@@ -104,6 +106,37 @@ async function run() {
           res.send(result);
         });
 
+        // Get all category information 
+        app.get("/category", verifyToken, async (req, res) => {
+          const result = await categoryCollection.find().toArray();
+          res.send(result);
+        });
+
+        // Get a Specific category from database 
+        app.get("/category/:category", verifyToken, async (req, res) => {
+          const category = req.params.category;
+          const query = { category: category };
+          const result = await medicineCollection.find(query).toArray();
+          res.send(result);
+        });
+
+        // Update a category information 
+        app.put("/category", verifyToken, async (req, res) => {
+          const category = req.body;
+          const query = { name: category?.name };
+          const updateDoc = {$set: {...category}};
+          const result = await categoryCollection.updateOne(query, updateDoc);
+          res.send(result);
+        });
+
+        // Delete a category from database 
+        app.delete("/category/:id", verifyToken, async (req, res) => {
+          const id = req.params.id;
+          const query = { _id: new ObjectId(id) };
+          const result = await categoryCollection.deleteOne(query);
+          res.send(result);
+        });
+
         // Save a user in the database at the time of login.
         app.put("/user", async (req, res) => {
           const user = req.body;
@@ -145,6 +178,27 @@ async function run() {
           const result = await medicineCollection.insertOne(medicine);
           res.send(result);
         }) 
+
+        // Save category information in the database 
+        app.post('/category', async (req, res) => {
+          const category = req.body;
+          const result = await categoryCollection.insertOne(category);
+          res.send(result);
+        })
+
+        // Save single data in the cart on database 
+        app.post('/cart', async (req, res) => {
+          const cart = req.body;
+          const query = { name: cart.name}
+          console.log(cart.name)
+          const isExist = await cartCollection.findOne(query)
+
+          if(isExist) return res.status(400).send({message: "Medicine already exist"})
+          
+          const result = await cartCollection.insertOne(cart);
+          res.send(result);
+        })
+
 
     
 
