@@ -55,6 +55,8 @@ async function run() {
     const medicineCollection = database.collection('medicine')
     const categoryCollection = database.collection('category')
     const cartCollection = database.collection('cart')
+    const advertisementCollection = database.collection('advertisement')
+    const sliderCollection = database.collection('slider')
 
 
         // auth related api
@@ -101,22 +103,42 @@ async function run() {
         });
 
         // Get all the medicine information 
-        app.get("/medicine", verifyToken, async (req, res) => {
+        app.get("/medicine", async (req, res) => {
           const result = await medicineCollection.find().toArray();
           res.send(result);
         });
 
+        // Get all medicine of a seller 
+        app.get("/medicine/:email", verifyToken, async (req, res) => {
+          const email = req.params.email;
+          const query = { seller: email };
+          const result = await medicineCollection.find(query).toArray();
+          res.send(result);
+        });
+
         // Get all category information 
-        app.get("/category", verifyToken, async (req, res) => {
+        app.get("/category", async (req, res) => {
           const result = await categoryCollection.find().toArray();
           res.send(result);
         });
 
         // Get a Specific category from database 
-        app.get("/category/:category", verifyToken, async (req, res) => {
+        app.get("/category/:category", async (req, res) => {
           const category = req.params.category;
           const query = { category: category };
           const result = await medicineCollection.find(query).toArray();
+          res.send(result);
+        });
+
+        // Get all advertisement data from database 
+        app.get("/advertisement", verifyToken, async (req, res) => {
+          const result = await advertisementCollection.find().toArray();
+          res.send(result);
+        });
+
+        // Get all advertised slider 
+        app.get("/slider", async (req, res) => {
+          const result = await sliderCollection.find().toArray();
           res.send(result);
         });
 
@@ -175,6 +197,9 @@ async function run() {
         // Save medicine information on the database by inserting method
         app.post('/medicine', async (req, res) => {
           const medicine = req.body;
+          const query = { name: medicine.name };
+          const isExist = await medicineCollection.findOne(query)
+          if(isExist) return res.status(400).send({message: "Medicine already exist"})
           const result = await medicineCollection.insertOne(medicine);
           res.send(result);
         }) 
@@ -182,7 +207,10 @@ async function run() {
         // Save category information in the database 
         app.post('/category', async (req, res) => {
           const category = req.body;
-          const result = await categoryCollection.insertOne(category);
+          const query = { category: category.categoryName };
+          const medicine = await medicineCollection.find(query).toArray();
+          const categoryInfo = { ...category, totalIncategory: medicine.length}
+          const result = await categoryCollection.insertOne(categoryInfo);
           res.send(result);
         })
 
@@ -196,6 +224,33 @@ async function run() {
           if(isExist) return res.status(400).send({message: "Medicine already exist"})
           
           const result = await cartCollection.insertOne(cart);
+          res.send(result);
+        })
+
+        // Save Advertisement data on the database 
+        app.post('/advertisement', async (req, res) => {
+          const advertisement = req.body;
+          const query =  { name: advertisement.name }
+          const isExist = await advertisementCollection.findOne(query);
+          if(isExist) return res.status(400).send({message: "Advertisement already exist"})
+          const result = await advertisementCollection.insertOne(advertisement);
+          res.send(result);
+        })
+
+        // Save advertisement data for slider ads 
+        app.post('/slider', async (req, res) => {
+          const slider = req.body;
+          const query =  { name: slider.name }
+          const isExist = await sliderCollection.findOne(query);
+          if(isExist) {
+            const changeAdvertisement = await advertisementCollection.updateOne(query,{ $set: { isAdvertised: 'No'}});
+            const changeMedicine = await medicineCollection.updateOne(query,{ $set: { isAdvertised: 'No'}});
+            const removeSlider = await sliderCollection.deleteOne(query);
+            return res.send(removeSlider)
+          }
+            const changeAdvertisement = await advertisementCollection.updateOne(query,{ $set: { isAdvertised: 'Yes'}});
+          const changeMedicine = await medicineCollection.updateOne(query,{ $set: { isAdvertised: 'Yes'}});
+          const result = await sliderCollection.insertOne(slider);
           res.send(result);
         })
 
