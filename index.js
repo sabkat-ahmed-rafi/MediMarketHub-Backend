@@ -104,8 +104,34 @@ async function run() {
 
         // Get all the medicine information 
         app.get("/medicine", async (req, res) => {
-          const result = await medicineCollection.find().toArray();
+          let search = req.query.search
+          const sort = req.query.sort
+          const page = parseInt(req.query.page) || 1
+          const limit = parseInt(req.query.limit) || 3
+          console.log(page)
+          console.log(limit)
+          const skip = (page - 1) * limit 
+          console.log(skip)
+          if (typeof search !== 'string') {
+            search = '';
+          }
+          const query = {
+            $or: [
+              { name: { $regex: search, $options: 'i' }},
+              { genericName: { $regex: search, $options: 'i' }},
+              { company: { $regex: search, $options: 'i' }},
+              { category: { $regex: search, $options: 'i' }},
+            ]
+          }
+          const sortQuery = { sort: {price: sort == 'ascending' ? 1 : -1} }
+          const result = await medicineCollection.find(query, sortQuery).skip(skip).limit(limit).toArray();
           res.send(result);
+        });
+
+        // Get totalCount of medicine 
+        app.get("/medicine/count", async (req, res) => {
+          const result = await medicineCollection.countDocuments();
+          res.send({result});
         });
 
         // Get all medicine of a seller 
@@ -183,7 +209,7 @@ async function run() {
         // Update a user role
         app.patch("/user/updateRole", verifyToken, async (req, res) => {
           const user = req.body;
-          const query = { email: user?.email };
+          const query = { email: user?.userEmail };
           const options = { upsert: true };
           const updateDoc = {
             $set: {
