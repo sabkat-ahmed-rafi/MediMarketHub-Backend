@@ -1,9 +1,10 @@
+require('dotenv').config()
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const express = require('express')
 const cors = require('cors')
 const jwt = require("jsonwebtoken");
 const cookieParser = require("cookie-parser");
-require('dotenv').config()
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY)
 
 
 const port = process.env.PORT 
@@ -57,6 +58,7 @@ async function run() {
     const cartCollection = database.collection('cart')
     const advertisementCollection = database.collection('advertisement')
     const sliderCollection = database.collection('slider')
+    const purchaseCollection = database.collection('purchase')
 
 
         // auth related api
@@ -108,10 +110,7 @@ async function run() {
           const sort = req.query.sort
           const page = parseInt(req.query.page) || 1
           const limit = parseInt(req.query.limit) || 3
-          console.log(page)
-          console.log(limit)
           const skip = (page - 1) * limit 
-          console.log(skip)
           if (typeof search !== 'string') {
             search = '';
           }
@@ -165,6 +164,22 @@ async function run() {
         // Get all advertised slider 
         app.get("/slider", async (req, res) => {
           const result = await sliderCollection.find().toArray();
+          res.send(result);
+        });
+
+        // Get all cart product from database 
+        app.get("/cart/:email", verifyToken, async (req, res) => {
+          const user = req.user;
+          const query = { buyerEmail: user?.email };
+          const result = await cartCollection.find(query).toArray();
+          res.send(result);
+        });
+
+        // Get a specific purchase item 
+        app.get("/purchase/:transactionId", verifyToken, async (req, res) => {
+          const id = req.params.transactionId;
+          const query = { transactionId: id };
+          const result = await purchaseCollection.findOne(query);
           res.send(result);
         });
 
@@ -243,8 +258,7 @@ async function run() {
         // Save single data in the cart on database 
         app.post('/cart', async (req, res) => {
           const cart = req.body;
-          const query = { name: cart.name}
-          console.log(cart.name)
+          const query = { name: cart.name, buyerEmail: cart.buyerEmail}
           const isExist = await cartCollection.findOne(query)
 
           if(isExist) return res.status(400).send({message: "Medicine already exist"})
@@ -279,6 +293,86 @@ async function run() {
           const result = await sliderCollection.insertOne(slider);
           res.send(result);
         })
+
+        // Change the Quantity of a product from database 
+        app.patch("/cart/quantity-increase", verifyToken, async (req, res) => {
+          const medicine = req.body;
+          const query = { name: medicine?.name };
+          const findPrice = await medicineCollection.findOne(query);
+          const updateDoc = {
+            $inc: {
+              quantity: 1,
+              price: findPrice?.price,
+            },
+          };
+          const result = await cartCollection.updateOne(query, updateDoc);
+          res.send(result);
+        });
+
+        // Change the Quantity of a product from database 
+        app.patch("/cart/quantity-decrease", verifyToken, async (req, res) => {
+          const medicine = req.body;
+          const query = { name: medicine?.name };
+          const findPrice = await medicineCollection.findOne(query)
+          const findPriceCart = await cartCollection.findOne(query)
+          if(findPriceCart?.price == findPrice.price) {
+            return res.status(400).send({message: "price cannot be less that its original value"})
+          }
+          const updateDoc = {
+            $inc: {
+              quantity: -1,
+              price: -findPrice?.price,
+            },
+          };
+          const result = await cartCollection.updateOne(query, updateDoc);
+          res.send(result);
+        });
+
+       // Clear the Cart by deleting user specific data 
+       app.delete('/cartClear/:email', verifyToken, async (req, res) => {
+         const email = req.params.email;
+         const query = { buyerEmail: email };
+         const result = await cartCollection.deleteMany(query);
+         res.send(result);
+       })
+
+        // Delete an item from cart 
+        app.delete('/cart/:id', verifyToken, async (req, res) => {
+          const id = req.params.id;
+          const query = { _id: new ObjectId(id) };
+          const result = await cartCollection.deleteOne(query);
+          res.send(result);
+        })
+
+        // Creating a client secret for payment in stripe
+        app.post("/create-payment-intent", async (req, res) => {
+          const price = req.body.amount;
+          const priceInCent = parseFloat(price) * 100
+
+          if(!price || priceInCent < 1) return
+        
+          // Create a PaymentIntent with the order amount and currency
+          const { client_secret } = await stripe.paymentIntents.create({
+            amount: priceInCent,
+            currency: "usd",
+
+            automatic_payment_methods: {
+              enabled: true,
+            },
+          });
+        
+          res.send({clientSecret: client_secret});
+        });
+
+        // Save purchase info the database 
+        app.post("/purchase", verifyToken, async (req, res) => {
+          const purchase = req.body;
+          const query = { buyerEmail: purchase.buyerEmail };
+          const result1 = await purchaseCollection.insertOne(purchase);
+          const result = await cartCollection.deleteMany(query)
+          res.send(result1);
+        });
+
 
 
     
